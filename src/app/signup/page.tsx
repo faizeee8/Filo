@@ -122,7 +122,7 @@ function SignupForm() {
       <CardHeader>
         <CardTitle>Create your account</CardTitle>
         <CardDescription>
-          Join CreatorConnect as a creator or a brand.
+          Join Filo as a creator or a brand.
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -1,4 +1,4 @@
-# CreatorConnect — Creator–Brand Marketplace
+# Filo — Creator–Brand Marketplace
 
 Hyderabad-first marketplace connecting brands with creators for paid and
 barter collaborations. Next.js (App Router, TypeScript) + Tailwind +

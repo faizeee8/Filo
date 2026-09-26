@@ -6,7 +6,7 @@ export function MarketingNavbar() {
     <header className="border-b border-border">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
         <Link href="/" className="text-lg font-semibold tracking-tight">
-          CreatorConnect
+          Filo
         </Link>
         <nav className="flex items-center gap-3">
           <Button asChild variant="ghost" size="sm">

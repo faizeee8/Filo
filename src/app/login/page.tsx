@@ -45,7 +45,7 @@ function LoginForm() {
     <Card>
       <CardHeader>
         <CardTitle>Log in</CardTitle>
-        <CardDescription>Welcome back to CreatorConnect.</CardDescription>
+        <CardDescription>Welcome back to Filo.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

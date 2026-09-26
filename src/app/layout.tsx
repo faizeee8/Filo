@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CreatorConnect — Smarter infrastructure for brand-creator collaborations",
+  title: "Filo — Smarter infrastructure for brand-creator collaborations",
   description:
     "The marketplace connecting Hyderabad brands with the right creators, with explainable matching, campaign workflows and payment tracking.",
 };

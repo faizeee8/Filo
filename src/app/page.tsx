@@ -42,7 +42,7 @@ export default async function LandingPage() {
             Smarter infrastructure connecting brands with the right creators.
           </h1>
           <p className="mt-6 max-w-2xl text-lg text-muted-foreground">
-            CreatorConnect replaces scattered DMs, spreadsheets and guesswork
+            Filo replaces scattered DMs, spreadsheets and guesswork
             with one structured workflow — discovery, explainable matching,
             campaign management, approvals and payment tracking, in one
             place.
@@ -63,7 +63,7 @@ export default async function LandingPage() {
         <div className="mx-auto grid max-w-6xl gap-6 px-6 py-16 sm:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Why brands use CreatorConnect</CardTitle>
+              <CardTitle>Why brands use Filo</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>Search and filter creators by niche, location, followers, engagement and budget together — not one at a time.</p>
@@ -73,7 +73,7 @@ export default async function LandingPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Why creators use CreatorConnect</CardTitle>
+              <CardTitle>Why creators use Filo</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>One professional profile — social metrics, portfolio, niche and preferences — instead of scattered inquiries.</p>
