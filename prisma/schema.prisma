@@ -1,0 +1,424 @@
+// ============================================================================
+// DAY 1 SCHEMA — architecture & documentation milestone
+// ----------------------------------------------------------------------------
+// This file is the single source of truth for both frontend and backend.
+// Field names here MUST match docs/database-schema.md and docs/api.md exactly.
+//
+// Scope: Users, Creators, Brands, Social Accounts, Campaigns, Applications,
+// Invitations, Deliverables, Payments, Verification — the 10 entities agreed
+// for Day 1. No API route logic is implemented yet; this is schema + docs
+// only, for team review before development begins.
+//
+// Deliberately NOT modeled yet (documented as an assumption in
+// docs/architecture.md, to avoid unnecessary tables per MVP scope):
+//   - A separate "CampaignCollaborator" join table. The active collaboration
+//     between a creator and a campaign is implied by an ACCEPTED
+//     CampaignApplication or CampaignInvitation; Deliverable and Payment
+//     reference (campaignId, creatorProfileId) directly.
+//   - Shortlist, CampaignRequirement, DeliverableRevision, CampaignAnalytics,
+//     Notification, Dispute — later phases, not needed for Day 1 review.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum Role {
+  CREATOR
+  BRAND
+  ADMIN
+}
+
+// Cached, denormalized status shown on a profile at a glance (e.g. a
+// "Verified" badge). The Verification model below is the audit trail of
+// individual verification requests/decisions that ultimately set this value.
+enum VerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum Niche {
+  FOOD
+  FASHION
+  BEAUTY
+  FITNESS
+  TECHNOLOGY
+  TRAVEL
+  LIFESTYLE
+  GAMING
+  OTHER
+}
+
+enum Platform {
+  INSTAGRAM
+  YOUTUBE
+  TIKTOK
+  TWITTER
+  FACEBOOK
+  OTHER
+}
+
+enum CollaborationType {
+  PAID
+  BARTER
+  BOTH
+}
+
+enum CampaignStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+enum DeliverableStatus {
+  PENDING
+  SUBMITTED
+  REVISION_REQUESTED
+  APPROVED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
+// Subject a Verification record applies to. Exactly one of
+// Verification.creatorProfileId / brandProfileId is set to match; enforced at
+// the application layer (see docs/database-schema.md "Constraints").
+enum VerificationSubjectType {
+  CREATOR
+  BRAND
+}
+
+enum VerificationDecision {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+// ----------------------------------------------------------------------------
+// CORE IDENTITY
+// ----------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  creatorProfile CreatorProfile?
+  brandProfile   BrandProfile?
+
+  // Admin-only reverse relations: which verification decisions and payment
+  // status updates this user (as an admin) has made. Optional in practice —
+  // only populated for users with role = ADMIN.
+  verificationsReviewed Verification[] @relation("VerificationReviewedBy")
+  paymentsUpdated       Payment[]      @relation("PaymentUpdatedBy")
+
+  @@index([role])
+}
+
+model CreatorProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Required at profile creation
+  city String @default("Hyderabad")
+
+  // Optional — filled in as the creator completes their profile
+  bio               String?
+  niche             Niche?
+  followerCount     Int? // aggregate, self-reported across platforms
+  engagementRate    Float? // percentage, e.g. 4.8 = 4.8%
+  audienceLocation  String? // where the creator's audience is mostly based
+  collaborationType CollaborationType?
+
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  socialAccounts SocialAccount[]
+  applications   CampaignApplication[]
+  invitations    CampaignInvitation[]
+  deliverables   Deliverable[]
+  payments       Payment[]
+  verifications  Verification[]
+
+  @@index([verificationStatus])
+  @@index([niche])
+  @@index([city])
+}
+
+model BrandProfile {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Required at profile creation
+  companyName String
+  city        String @default("Hyderabad")
+
+  // Optional
+  website  String?
+  industry String?
+
+  verificationStatus VerificationStatus @default(UNVERIFIED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns     Campaign[]
+  verifications Verification[]
+
+  @@index([verificationStatus])
+}
+
+// ----------------------------------------------------------------------------
+// SOCIAL ACCOUNTS  (one creator -> many social accounts)
+// ----------------------------------------------------------------------------
+
+model SocialAccount {
+  id               String   @id @default(cuid())
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  // Required
+  platform Platform
+  handle   String // e.g. "@brandname", without assuming a specific URL format
+
+  // Optional — platform-specific metrics can differ from the creator's
+  // profile-level aggregate followerCount/engagementRate
+  profileUrl     String?
+  followerCount  Int?
+  engagementRate Float?
+  isVerified     Boolean @default(false) // ownership of THIS account confirmed, distinct from CreatorProfile.verificationStatus
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Assumption: one account per platform per creator for MVP (a creator
+  // cannot list two Instagram handles). Revisit if that's too restrictive.
+  @@unique([creatorProfileId, platform])
+  @@index([platform])
+}
+
+// ----------------------------------------------------------------------------
+// CAMPAIGNS
+// ----------------------------------------------------------------------------
+
+model Campaign {
+  id             String       @id @default(cuid())
+  brandProfileId String
+  brandProfile   BrandProfile @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+
+  // Required
+  title             String
+  description       String // goals/brief
+  niche             Niche
+  targetLocation    String @default("Hyderabad")
+  deliverablesBrief String // human-readable summary, e.g. "2 Instagram Reels + 1 Story"
+  platforms         Platform[] // target platforms for this campaign
+  collaborationType CollaborationType
+  status            CampaignStatus @default(DRAFT)
+
+  // Optional
+  budgetMin           Int? // whole INR rupees; null when purely barter
+  budgetMax           Int?
+  applicationDeadline DateTime?
+  startDate           DateTime?
+  endDate             DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applications  CampaignApplication[]
+  invitations   CampaignInvitation[]
+  deliverables  Deliverable[]
+  payments      Payment[]
+
+  @@index([status])
+  @@index([niche])
+  @@index([targetLocation])
+  @@index([brandProfileId])
+}
+
+// Creator-initiated: "I want to work on this campaign."
+// Many-to-many between CreatorProfile and Campaign, resolved as its own
+// entity because it carries its own state (status, message, proposed rate).
+model CampaignApplication {
+  id               String   @id @default(cuid())
+  campaignId       String
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  // Optional
+  message      String? // creator's pitch note
+  proposedRate Int? // creator's asking price in INR, if paid
+
+  status ApplicationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A creator can only apply once per campaign.
+  @@unique([campaignId, creatorProfileId])
+  @@index([status])
+}
+
+// Brand-initiated: "We want you for this campaign."
+// Same shape as CampaignApplication but the other direction; kept as a
+// separate model rather than a single "direction" flag because the two
+// flows have different fields growing independently over time (e.g. offer
+// terms on invitations vs. a pitch message on applications).
+model CampaignInvitation {
+  id               String   @id @default(cuid())
+  campaignId       String
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  // Optional
+  message String? // brand's note to the creator
+
+  status InvitationStatus @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // A brand can only invite a given creator once per campaign.
+  @@unique([campaignId, creatorProfileId])
+  @@index([status])
+}
+
+// ----------------------------------------------------------------------------
+// DELIVERABLES & PAYMENTS
+// (scoped to an accepted campaign x creator pair — see note at top of file)
+// ----------------------------------------------------------------------------
+
+model Deliverable {
+  id               String   @id @default(cuid())
+  campaignId       String
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  // Required
+  title  String // e.g. "Instagram Reel #1"
+  status DeliverableStatus @default(PENDING)
+
+  // Optional
+  description    String?
+  dueDate        DateTime?
+  submissionUrl  String? // link to submitted content
+  submissionNotes String?
+  reviewNotes    String? // brand's feedback on revision request / rejection
+  submittedAt    DateTime?
+  approvedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([campaignId, creatorProfileId])
+}
+
+model Payment {
+  id               String   @id @default(cuid())
+  campaignId       String
+  campaign         Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorProfileId String
+  creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+
+  // Required
+  amount Int // whole INR rupees, owed to the creator for this campaign
+  status PaymentStatus @default(PENDING)
+
+  // Optional — populated as the admin moves the payment through its states.
+  // No real payment gateway in the MVP: this is a manually-updated ledger,
+  // architected so Razorpay/Stripe can plug in later (see architecture.md).
+  paymentMethod        String? // e.g. "Bank Transfer", "UPI" — free text for MVP
+  transactionReference String? // manual reference number entered by admin
+  paidAt               DateTime?
+  updatedByAdminId     String?
+  updatedByAdmin       User? @relation("PaymentUpdatedBy", fields: [updatedByAdminId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // One payment record per creator per campaign for MVP (a single lump-sum
+  // payout per collaboration, not itemized per deliverable). Documented
+  // assumption — revisit if partial/milestone payments are needed.
+  @@unique([campaignId, creatorProfileId])
+  @@index([status])
+}
+
+// ----------------------------------------------------------------------------
+// VERIFICATION  (audit trail of verification requests/decisions)
+// ----------------------------------------------------------------------------
+
+model Verification {
+  id          String                  @id @default(cuid())
+  subjectType VerificationSubjectType
+
+  // Exactly one of these two is set, matching subjectType. Enforced at the
+  // application layer — see docs/database-schema.md "Constraints" for why
+  // this shape was chosen over a single polymorphic subjectId.
+  creatorProfileId String?
+  creatorProfile   CreatorProfile? @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
+  brandProfileId   String?
+  brandProfile     BrandProfile?   @relation(fields: [brandProfileId], references: [id], onDelete: Cascade)
+
+  status VerificationDecision @default(PENDING)
+
+  // Optional
+  documentUrl String? // link to submitted proof, if any
+  notes       String? // admin notes on approval/rejection
+
+  reviewedByAdminId String?
+  reviewedByAdmin   User?     @relation("VerificationReviewedBy", fields: [reviewedByAdminId], references: [id])
+  reviewedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([subjectType])
+}
