@@ -1,7 +1,18 @@
-import { PrismaClient } from "@prisma/client";
+import "server-only";
 
-// Prevents "too many connections" errors in dev, where Next.js hot-reloads
-// modules and would otherwise instantiate a new PrismaClient on every reload.
+import { PrismaClient } from "@/generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+
+const connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("DATABASE_URL is not set");
+}
+
+const adapter = new PrismaPg({
+  connectionString,
+});
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
@@ -9,7 +20,7 @@ const globalForPrisma = globalThis as unknown as {
 export const prisma =
   globalForPrisma.prisma ??
   new PrismaClient({
-    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+    adapter,
   });
 
 if (process.env.NODE_ENV !== "production") {
