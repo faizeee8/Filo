@@ -20,12 +20,12 @@
 // ============================================================================
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ----------------------------------------------------------------------------
@@ -33,7 +33,7 @@ datasource db {
 // ----------------------------------------------------------------------------
 
 enum Role {
-  CREATOR
+  CREATORS
   BRAND
   ADMIN
 }
