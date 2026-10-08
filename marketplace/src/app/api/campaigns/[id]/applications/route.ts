@@ -5,9 +5,158 @@ import { prisma } from "@/lib/prisma";
 
 import { ApplicationStatus } from "@/generated/prisma/enums";
 
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
+
+// GET /api/campaigns/{id}/applications
+// Allows the brand that owns the campaign to view all applications.
+export async function GET(
+  _request: Request,
+  { params }: RouteContext
+) {
+  try {
+    // Check authentication
+    const session = await auth();
+
+    if (!session?.user?.id) {
+      return NextResponse.json(
+        {
+          error: "Authentication required",
+        },
+        {
+          status: 401,
+        }
+      );
+    }
+
+    // Only brands can view campaign applications
+    if (session.user.role !== "BRAND") {
+      return NextResponse.json(
+        {
+          error: "Only brands can view campaign applications",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // Get campaign ID from URL
+    const { id: campaignId } = await params;
+
+    if (!campaignId) {
+      return NextResponse.json(
+        {
+          error: "Campaign ID is required",
+        },
+        {
+          status: 400,
+        }
+      );
+    }
+
+    // Find campaign and verify that the current brand owns it
+    const campaign = await prisma.campaign.findUnique({
+      where: {
+        id: campaignId,
+      },
+      select: {
+        id: true,
+        title: true,
+        brandProfile: {
+          select: {
+            userId: true,
+          },
+        },
+      },
+    });
+
+    if (!campaign) {
+      return NextResponse.json(
+        {
+          error: "Campaign not found",
+        },
+        {
+          status: 404,
+        }
+      );
+    }
+
+    // Prevent other brands from viewing applications
+    if (campaign.brandProfile.userId !== session.user.id) {
+      return NextResponse.json(
+        {
+          error:
+            "You are not authorized to view applications for this campaign",
+        },
+        {
+          status: 403,
+        }
+      );
+    }
+
+    // Get all applications for this campaign
+    const applications =
+      await prisma.campaignApplication.findMany({
+        where: {
+          campaignId,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          creatorProfile: {
+            select: {
+              id: true,
+              userId: true,
+              city: true,
+              niche: true,
+              followerCount: true,
+              engagementRate: true,
+              verificationStatus: true,
+            },
+          },
+        },
+      });
+
+    return NextResponse.json(
+      {
+        success: true,
+        campaign: {
+          id: campaign.id,
+          title: campaign.title,
+        },
+        count: applications.length,
+        applications,
+      },
+      {
+        status: 200,
+      }
+    );
+  } catch (error) {
+    console.error(
+      "Campaign applications listing failed:",
+      error
+    );
+
+    return NextResponse.json(
+      {
+        error:
+          "Something went wrong while listing campaign applications",
+      },
+      {
+        status: 500,
+      }
+    );
+  }
+}
+
+// POST /api/campaigns/{id}/applications
+// Allows an authenticated creator to apply to a campaign.
 export async function POST(
   request: Request,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: RouteContext
 ) {
   try {
     // Check authentication
