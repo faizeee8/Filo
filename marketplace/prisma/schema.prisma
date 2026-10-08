@@ -341,17 +341,18 @@ model Deliverable {
   creatorProfile   CreatorProfile @relation(fields: [creatorProfileId], references: [id], onDelete: Cascade)
 
   // Required
-  title  String // e.g. "Instagram Reel #1"
-  status DeliverableStatus @default(PENDING)
+  title         String
+  status        DeliverableStatus @default(PENDING)
+  revisionCount Int @default(0)
 
   // Optional
-  description    String?
-  dueDate        DateTime?
-  submissionUrl  String? // link to submitted content
+  description     String?
+  dueDate         DateTime?
+  submissionUrl   String?
   submissionNotes String?
-  reviewNotes    String? // brand's feedback on revision request / rejection
-  submittedAt    DateTime?
-  approvedAt     DateTime?
+  reviewNotes     String?
+  submittedAt     DateTime?
+  approvedAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
