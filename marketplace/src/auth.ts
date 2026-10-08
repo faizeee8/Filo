@@ -1,17 +1,13 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
+
+import authConfig from "@/auth.config";
 import { prisma } from "@/lib/prisma";
 import { loginSchema } from "@/lib/validations/auth";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  session: {
-    strategy: "jwt",
-  },
-
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
 
   providers: [
     Credentials({
@@ -53,18 +49,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         }
 
         /*
-         * Prisma currently uses:
-         *   CREATORS
-         *   BRAND
-         *   ADMIN
-         *
-         * NextAuth expects:
-         *   CREATOR
-         *   BRAND
-         *   ADMIN
-         *
-         * Convert Prisma's CREATORS value to the value
-         * expected by NextAuth.
+         * Prisma uses CREATORS.
+         * NextAuth uses CREATOR.
          */
         const role =
           user.role === "CREATORS"
@@ -80,28 +66,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
-
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.role = user.role;
-      }
-
-      return token;
-    },
-
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-
-        session.user.role = token.role as
-          | "CREATOR"
-          | "BRAND"
-          | "ADMIN";
-      }
-
-      return session;
-    },
-  },
 });
